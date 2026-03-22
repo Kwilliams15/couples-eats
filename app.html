@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Couples Eats 🍽️</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --pink: #ff6b6b; --pink-dark: #e85555; --rose: #ffd6d6;
+      --cream: #fff9f5; --text: #1a1a2e; --muted: #6b7280;
+      --border: #e5e7eb; --shadow: 0 4px 24px rgba(0,0,0,0.08); --radius: 16px;
+    }
+    body { font-family: 'Inter', sans-serif; background: var(--cream); color: var(--text); min-height: 100vh; }
+    h1, h2 { font-family: 'Playfair Display', serif; }
+    #root { min-height: 100vh; display: flex; flex-direction: column; }
+    .page { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 24px 16px 48px; max-width: 600px; margin: 0 auto; width: 100%; }
+    .card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); padding: 28px; width: 100%; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 28px; border-radius: 12px; font-size: 1rem; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; font-family: inherit; text-decoration: none; }
+    .btn-primary { background: var(--pink); color: white; }
+    .btn-primary:hover:not(:disabled) { background: var(--pink-dark); transform: translateY(-1px); }
+    .btn-secondary { background: white; color: var(--pink); border: 2px solid var(--pink); }
+    .btn-secondary:hover { background: var(--rose); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-full { width: 100%; }
+    input[type="text"], input[type="number"], input[type="password"] {
+      width: 100%; padding: 14px 16px; border: 2px solid var(--border); border-radius: 12px;
+      font-size: 1rem; font-family: inherit; outline: none; transition: border-color 0.2s;
+    }
+    input:focus { border-color: var(--pink); }
+    .error { background: #fee2e2; color: #dc2626; padding: 12px 16px; border-radius: 10px; font-size: 0.9rem; margin-top: 12px; text-align: center; }
+    .tag { font-size: 0.75rem; padding: 3px 10px; border-radius: 99px; }
+    @keyframes bounce { 0%,100%{transform:translateY(0);opacity:.5} 50%{transform:translateY(-10px);opacity:1} }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+// ── CONFIG ──────────────────────────────────────────────────────────────────
+// Paste your Google Places API key here (must have Places API + JS API enabled)
+const GOOGLE_API_KEY = '';
+const SEARCH_RADIUS = 8047; // 5 miles in metres
+
+// ── QUESTIONS ───────────────────────────────────────────────────────────────
+const QUESTIONS = [
+  { id:'cuisines', q:'What cuisines are you feeling?', sub:'Pick all that sound good.', type:'multi', opts:[
+    {l:'🍕 Italian',v:'Italian'},{l:'🍣 Japanese',v:'Japanese'},{l:'🌮 Mexican',v:'Mexican'},
+    {l:'🍔 American',v:'American'},{l:'🍜 Chinese / Dim Sum',v:'Chinese'},{l:'🍛 Indian',v:'Indian'},
+    {l:'🥙 Mediterranean',v:'Mediterranean'},{l:'🥡 Thai',v:'Thai'},{l:'🍗 Korean BBQ',v:'Korean'},
+    {l:'🥗 Healthy / Salads',v:'Healthy'},
+  ]},
+  { id:'priceRange', q:"What's your budget tonight?", sub:'Per person, before drinks.', type:'single', opts:[
+    {l:'$ Under $15',v:1},{l:'$$ $15–$30',v:2},{l:'$$$ $30–$60',v:3},{l:'$$$$ $60+',v:4},
+  ]},
+  { id:'vibe', q:"What's the vibe?", sub:'Pick the one that fits tonight.', type:'single', opts:[
+    {l:'🕯️ Romantic & intimate',v:'romantic'},{l:'😎 Casual & laid-back',v:'casual'},
+    {l:'⚡ Quick & easy',v:'fast'},{l:'✨ Trendy & fun',v:'trendy'},
+  ]},
+  { id:'dietary', q:'Any dietary needs?', sub:'Select all that apply.', type:'multi', opts:[
+    {l:'🥬 Vegetarian options needed',v:'vegetarian'},{l:'🌱 Vegan options needed',v:'vegan'},
+    {l:'🌾 Gluten-free options needed',v:'gluten-free'},{l:'🥩 Halal',v:'halal'},
+    {l:'✡️ Kosher',v:'kosher'},{l:'😌 No restrictions',v:'none'},
+  ]},
+  { id:'diningMode', q:'How do you want to eat?', sub:'Just one.', type:'single', opts:[
+    {l:'🪑 Sit-down / dine-in',v:'dine-in'},{l:'📦 Takeout / pickup',v:'takeout'},
+    {l:'🛵 Delivery',v:'delivery'},{l:'🙂 No preference',v:'any'},
+  ]},
+  { id:'mood', q:"What's your food mood?", sub:'How adventurous are you feeling?', type:'single', opts:[
+    {l:"🗺️ Let's try something new",v:'adventurous'},{l:'🏡 Comfort food please',v:'comfort'},
+    {l:'⚖️ Somewhere in between',v:'balanced'},
+  ]},
+  { id:'seating', q:'Seating preference?', sub:'Inside, outside, or anywhere?', type:'single', opts:[
+    {l:'🏠 Indoors',v:'indoor'},{l:'🌿 Outdoors / patio',v:'outdoor'},{l:'💁 No preference',v:'any'},
+  ]},
+  { id:'waitTime', q:'How long are you willing to wait?', sub:'Hunger level check.', type:'single', opts:[
+    {l:"⚡ Starving — 10 min max",v:'none'},{l:'🕐 Up to 30 min is fine',v:'short'},
+    {l:'🕑 We can wait an hour if worth it',v:'long'},
+  ]},
+  { id:'dealbreakers', q:'Any absolute dealbreakers?', sub:"We'll try to avoid these.", type:'multi', opts:[
+    {l:'🐟 No seafood',v:'no-seafood'},{l:'🌶️ Nothing too spicy',v:'no-spicy'},
+    {l:'🥩 No red meat',v:'no-red-meat'},{l:'🧅 No onions/garlic',v:'no-alliums'},
+    {l:'🥛 No dairy',v:'no-dairy'},{l:'👍 No dealbreakers',v:'none'},
+  ]},
+  { id:'priority', q:'What matters most when picking a place?', sub:'Your top priority.', type:'single', opts:[
+    {l:'⭐ Best ratings & reviews',v:'rating'},{l:'📍 Closest to us',v:'distance'},
+    {l:'💰 Best value for money',v:'value'},{l:'📸 Ambiance / Instagrammable',v:'ambiance'},
+  ]},
+];
+
+// ── MATCHING ─────────────────────────────────────────────────────────────────
+function scoreRestaurant(place, a1, a2) {
+  let score = 0;
+  const pp = place.price_level ?? 2;
+  const minP = Math.min(a1.priceRange ?? 2, a2.priceRange ?? 2);
+  const maxP = Math.max(a1.priceRange ?? 2, a2.priceRange ?? 2);
+
+  if (pp >= minP && pp <= maxP) score += 30;
+  else score += Math.max(0, 30 - Math.abs(pp - maxP) * 10);
+
+  if (place.rating >= 4.5) score += 25;
+  else if (place.rating >= 4.0) score += 20;
+  else if (place.rating >= 3.5) score += 10;
+
+  if (place.opening_hours?.open_now) score += 15;
+
+  const tot = place.user_ratings_total ?? 0;
+  if (tot > 500) score += 10; else if (tot > 100) score += 5;
+
+  if (a1.vibe === a2.vibe) {
+    const v = a1.vibe;
+    const types = (place.types || []).join(' ');
+    if (v === 'fast' && types.includes('fast_food')) score += 10;
+    if (v === 'romantic' && (place.name || '').toLowerCase().match(/bistro|grill|wine/)) score += 8;
+  }
+
+  if ((a1.priority === 'rating' || a2.priority === 'rating') && place.rating >= 4.3) score += 8;
+  if ((a1.priority === 'distance' || a2.priority === 'distance')) score += 5;
+
+  return score;
+}
+
+function computeResults(places, a1, a2) {
+  const c1 = a1.cuisines || []; const c2 = a2.cuisines || [];
+  const shared = c1.filter(c => c2.includes(c));
+  return {
+    sharedCuisines: shared,
+    restaurants: places
+      .map(p => ({ ...p, matchScore: scoreRestaurant(p, a1, a2) }))
+      .sort((a, b) => b.matchScore - a.matchScore)
+      .slice(0, 10),
+  };
+}
+
+// ── GOOGLE PLACES ─────────────────────────────────────────────────────────────
+async function fetchNearby(location, keyword) {
+  return new Promise((resolve, reject) => {
+    if (!window.google) { reject(new Error('Google Maps not loaded')); return; }
+    const svc = new window.google.maps.places.PlacesService(document.createElement('div'));
+    svc.nearbySearch({
+      location: new window.google.maps.LatLng(location.lat, location.lng),
+      radius: SEARCH_RADIUS,
+      type: 'restaurant',
+      keyword: keyword || 'restaurant',
+    }, (results, status) => {
+      if (status === window.google.maps.places.PlacesServiceStatus.OK) resolve(results);
+      else reject(new Error('Places API error: ' + status));
+    });
+  });
+}
+
+function loadGoogleMaps(apiKey) {
+  return new Promise((resolve, reject) => {
+    if (window.google?.maps?.places) { resolve(); return; }
+    window._gmCallback = resolve;
+    const s = document.createElement('script');
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=_gmCallback`;
+    s.onerror = () => reject(new Error('Failed to load Google Maps'));
+    document.head.appendChild(s);
+  });
+}
+
+// ── APP SCREENS ───────────────────────────────────────────────────────────────
+
+// Home
+function Home({ onStart }) {
+  const [apiKey, setApiKey] = useState(GOOGLE_API_KEY);
+  const [showKey, setShowKey] = useState(!GOOGLE_API_KEY);
+  return (
+    <div className="page" style={{ justifyContent: 'center', minHeight: '100vh' }}>
+      <div style={{ textAlign: 'center', marginBottom: 36 }}>
+        <div style={{ fontSize: 72, marginBottom: 12 }}>🍽️</div>
+        <h1 style={{ fontSize: '2.8rem', marginBottom: 10 }}>Couples Eats</h1>
+        <p style={{ color: 'var(--muted)', maxWidth: 340, margin: '0 auto', lineHeight: 1.6 }}>
+          Both of you answer a quick survey and we'll find the perfect restaurant for tonight.
+        </p>
+      </div>
+      <div className="card" style={{ maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {showKey ? (
+          <>
+            <div>
+              <label style={{ fontWeight: 600, display: 'block', marginBottom: 8 }}>Google Places API Key</label>
+              <input type="password" placeholder="Paste your API key here" value={apiKey}
+                onChange={e => setApiKey(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && apiKey && onStart(apiKey)} />
+              <p style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: 6 }}>
+                Required to search nearby restaurants. Key stays in your browser only.
+              </p>
+            </div>
+          </>
+        ) : null}
+        <button className="btn btn-primary btn-full" disabled={!apiKey}
+          onClick={() => onStart(apiKey)} style={{ fontSize: '1.05rem', padding: '16px' }}>
+          💑 Let's Find Somewhere to Eat
+        </button>
+        {!showKey && (
+          <button className="btn btn-secondary btn-full" onClick={() => setShowKey(true)}>
+            🔑 Change API Key
+          </button>
+        )}
+        <p style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--muted)' }}>
+          Pass-and-play: Person 1 fills out the survey, then Person 2 on the same device.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Location picker
+function LocationPicker({ onDone }) {
+  const [locating, setLocating] = useState(true);
+  const [error, setError] = useState('');
+  const [lat, setLat] = useState('');
+  const [lng, setLng] = useState('');
+
+  useEffect(() => {
+    if (!navigator.geolocation) { setLocating(false); setError('Geolocation not supported.'); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => onDone({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => { setLocating(false); setError('Could not auto-detect location.'); }
+    );
+  }, []);
+
+  return (
+    <div className="page" style={{ justifyContent: 'center', minHeight: '100vh' }}>
+      <div className="card" style={{ maxWidth: 420, textAlign: 'center' }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>{locating ? '📡' : '📍'}</div>
+        <h2 style={{ fontFamily: 'Inter', fontWeight: 700, fontSize: '1.4rem', marginBottom: 8 }}>
+          {locating ? 'Detecting your location…' : 'Enter your location'}
+        </h2>
+        {error && <p style={{ color: 'var(--muted)', marginBottom: 20, fontSize: '0.9rem' }}>{error}</p>}
+        {!locating && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
+            <input type="number" placeholder="Latitude (e.g. 40.7128)" value={lat} onChange={e => setLat(e.target.value)} />
+            <input type="number" placeholder="Longitude (e.g. -74.0060)" value={lng} onChange={e => setLng(e.target.value)} />
+            <button className="btn btn-primary btn-full" disabled={!lat || !lng}
+              onClick={() => onDone({ lat: parseFloat(lat), lng: parseFloat(lng) })}>
+              Set Location
+            </button>
+            <p style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+              Tip: Google "my coordinates" to find your lat/lng.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Survey
+function Survey({ personNum, onDone }) {
+  const [step, setStep] = useState(0);
+  const [answers, setAnswers] = useState({});
+  const q = QUESTIONS[step];
+  const isMulti = q.type === 'multi';
+  const cur = answers[q.id];
+  const canNext = isMulti ? (cur || []).length > 0 : !!cur;
+
+  const toggle = (v) => {
+    setAnswers(prev => {
+      const ex = prev[q.id] || (isMulti ? [] : null);
+      if (isMulti) {
+        return { ...prev, [q.id]: ex.includes(v) ? ex.filter(x => x !== v) : [...ex, v] };
+      }
+      return { ...prev, [q.id]: v };
+    });
+  };
+
+  const isSelected = (v) => isMulti ? (answers[q.id] || []).includes(v) : answers[q.id] === v;
+  const progress = ((step + 1) / QUESTIONS.length) * 100;
+
+  return (
+    <div className="page">
+      <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+        <span style={{ fontWeight: 700, color: 'var(--pink)' }}>
+          {personNum === 1 ? '💑 Person 1' : '💑 Person 2'}
+        </span>
+        <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>{step + 1} / {QUESTIONS.length}</span>
+      </div>
+      <div style={{ width: '100%', height: 6, background: 'var(--border)', borderRadius: 99, marginBottom: 28, overflow: 'hidden' }}>
+        <div style={{ width: `${progress}%`, height: '100%', background: 'var(--pink)', borderRadius: 99, transition: 'width 0.3s' }} />
+      </div>
+      <div className="card">
+        <h2 style={{ fontSize: '1.35rem', marginBottom: 6 }}>{q.q}</h2>
+        <p style={{ color: 'var(--muted)', fontSize: '0.88rem', marginBottom: 22 }}>{q.sub}</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+          {q.opts.map(opt => (
+            <button key={opt.v} onClick={() => toggle(opt.v)} style={{
+              padding: '13px 16px', borderRadius: 12, textAlign: 'left', fontFamily: 'inherit',
+              fontSize: '0.95rem', cursor: 'pointer', transition: 'all 0.15s',
+              border: `2px solid ${isSelected(opt.v) ? 'var(--pink)' : 'var(--border)'}`,
+              background: isSelected(opt.v) ? 'var(--rose)' : 'white',
+              color: isSelected(opt.v) ? 'var(--pink-dark)' : 'var(--text)',
+              fontWeight: isSelected(opt.v) ? 600 : 400,
+            }}>{opt.l}</button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24, gap: 10 }}>
+          {step > 0
+            ? <button className="btn btn-secondary" onClick={() => setStep(s => s - 1)}>← Back</button>
+            : <div />}
+          <button className="btn btn-primary" style={{ minWidth: 140 }} disabled={!canNext}
+            onClick={() => step < QUESTIONS.length - 1 ? setStep(s => s + 1) : onDone(answers)}>
+            {step === QUESTIONS.length - 1 ? '✓ Done' : 'Next →'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Handoff screen
+function Handoff({ onReady }) {
+  return (
+    <div className="page" style={{ justifyContent: 'center', minHeight: '100vh', textAlign: 'center' }}>
+      <div style={{ fontSize: 64, marginBottom: 16 }}>✅</div>
+      <h2 style={{ fontSize: '1.8rem', marginBottom: 12 }}>Person 1 is done!</h2>
+      <p style={{ color: 'var(--muted)', maxWidth: 300, margin: '0 auto 32px', lineHeight: 1.6 }}>
+        Hand the device to your partner so they can fill out their survey.
+      </p>
+      <button className="btn btn-primary" onClick={onReady} style={{ fontSize: '1.05rem', padding: '16px 36px' }}>
+        👋 I'm ready — start Person 2's survey
+      </button>
+    </div>
+  );
+}
+
+// Loading
+function Loading() {
+  return (
+    <div className="page" style={{ justifyContent: 'center', minHeight: '100vh', textAlign: 'center' }}>
+      <div style={{ fontSize: 64, marginBottom: 20, display: 'inline-block', animation: 'spin 1.5s linear infinite' }}>🔍</div>
+      <h2 style={{ fontSize: '1.6rem', marginBottom: 10 }}>Finding your perfect match…</h2>
+      <p style={{ color: 'var(--muted)' }}>Searching restaurants nearby and crunching your preferences.</p>
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 28 }}>
+        {[1,2,3].map(n => (
+          <div key={n} style={{ width: 12, height: 12, borderRadius: '50%', background: 'var(--pink)', animation: `bounce 1.2s ease-in-out ${(n-1)*0.2}s infinite` }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Results
+const PRICE = {1:'$',2:'$$',3:'$$$',4:'$$$$'};
+function Results({ restaurants, sharedCuisines, onRestart }) {
+  const [picked, setPicked] = useState(null);
+
+  if (!restaurants.length) return (
+    <div className="page" style={{ justifyContent: 'center', minHeight: '100vh', textAlign: 'center' }}>
+      <div style={{ fontSize: 64, marginBottom: 16 }}>😕</div>
+      <h2 style={{ fontSize: '1.6rem', marginBottom: 12 }}>No restaurants found</h2>
+      <p style={{ color: 'var(--muted)', marginBottom: 24 }}>Try a different location or check your API key.</p>
+      <button className="btn btn-primary" onClick={onRestart}>Start Over</button>
+    </div>
+  );
+
+  if (picked) return (
+    <div className="page" style={{ justifyContent: 'center', minHeight: '100vh', textAlign: 'center' }}>
+      <div style={{ fontSize: 80, marginBottom: 16 }}>🎊</div>
+      <h1 style={{ fontSize: '2rem', marginBottom: 8 }}>You're going to</h1>
+      <h2 style={{ fontSize: '1.9rem', color: 'var(--pink)', marginBottom: 8 }}>{picked.name}</h2>
+      <p style={{ color: 'var(--muted)', marginBottom: 32 }}>{picked.vicinity}</p>
+      <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(picked.name)}&query_place_id=${picked.place_id}`}
+          target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ textDecoration: 'none' }}>
+          📍 Open in Google Maps
+        </a>
+        <button className="btn btn-secondary" onClick={() => setPicked(null)}>← Other Options</button>
+      </div>
+      <button className="btn" onClick={onRestart} style={{ marginTop: 16, color: 'var(--muted)', background: 'transparent' }}>Start a new session</button>
+    </div>
+  );
+
+  return (
+    <div className="page">
+      <div style={{ textAlign: 'center', marginBottom: 28, paddingTop: 16 }}>
+        <div style={{ fontSize: 52 }}>🎉</div>
+        <h1 style={{ fontSize: '2rem', marginTop: 8, marginBottom: 6 }}>Here are your matches!</h1>
+        {sharedCuisines.length > 0 && (
+          <p style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>
+            You both enjoy: <strong style={{ color: 'var(--text)' }}>{sharedCuisines.join(', ')}</strong>
+          </p>
+        )}
+        <p style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: 4 }}>Sorted by how well they match both of you.</p>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%' }}>
+        {restaurants.map((r, i) => (
+          <div key={r.place_id || i} className="card" style={{ cursor: 'pointer', padding: '22px 24px' }} onClick={() => setPicked(r)}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  {i < 3 && <span style={{ fontSize: '1.1rem' }}>{['🥇','🥈','🥉'][i]}</span>}
+                  <h3 style={{ fontFamily: 'Inter', fontWeight: 700, fontSize: '1.05rem' }}>{r.name}</h3>
+                </div>
+                <p style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>{r.vicinity}</p>
+              </div>
+              {r.price_level && <span style={{ fontWeight: 700, color: '#15803d', flexShrink: 0 }}>{PRICE[r.price_level]}</span>}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 12, flexWrap: 'wrap' }}>
+              {r.rating && <span style={{ fontSize: '0.88rem' }}>⭐ <strong>{r.rating}</strong> <span style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>({(r.user_ratings_total||0).toLocaleString()})</span></span>}
+              {r.opening_hours?.open_now !== undefined && (
+                <span className="tag" style={{ background: r.opening_hours.open_now ? '#d1fae5' : '#fee2e2', color: r.opening_hours.open_now ? '#065f46' : '#dc2626', fontWeight: 600 }}>
+                  {r.opening_hours.open_now ? 'Open now' : 'Closed'}
+                </span>
+              )}
+              <span className="tag" style={{ background: '#f0f0ff', color: '#4338ca', fontWeight: 600, marginLeft: 'auto' }}>
+                {r.matchScore}pt match
+              </span>
+            </div>
+            {r.types?.length > 0 && (
+              <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {r.types.slice(0,3).filter(t => !['food','establishment','point_of_interest'].includes(t)).map(t => (
+                  <span key={t} className="tag" style={{ background: 'var(--rose)', color: 'var(--pink-dark)' }}>{t.replace(/_/g,' ')}</span>
+                ))}
+              </div>
+            )}
+            <div style={{ marginTop: 14, textAlign: 'right', color: 'var(--pink)', fontWeight: 600, fontSize: '0.88rem' }}>Tap to pick this one →</div>
+          </div>
+        ))}
+      </div>
+      <button className="btn btn-secondary" onClick={onRestart} style={{ marginTop: 28 }}>🔄 Start Over</button>
+    </div>
+  );
+}
+
+// ── MAIN APP ──────────────────────────────────────────────────────────────────
+function App() {
+  const [screen, setScreen] = useState('home'); // home | location | survey1 | handoff | survey2 | loading | results
+  const [apiKey, setApiKey] = useState(GOOGLE_API_KEY);
+  const [location, setLocation] = useState(null);
+  const [answers1, setAnswers1] = useState(null);
+  const [results, setResults] = useState(null);
+  const [error, setError] = useState('');
+
+  const restart = () => { setScreen('home'); setAnswers1(null); setResults(null); setError(''); };
+
+  const handleStart = (key) => { setApiKey(key); setScreen('location'); };
+
+  const handleLocation = (loc) => { setLocation(loc); setScreen('survey1'); };
+
+  const handlePerson1Done = (ans) => { setAnswers1(ans); setScreen('handoff'); };
+
+  const handlePerson2Done = async (ans2) => {
+    setScreen('loading');
+    setError('');
+    try {
+      await loadGoogleMaps(apiKey);
+      const c1 = answers1.cuisines || [];
+      const c2 = ans2.cuisines || [];
+      const shared = c1.filter(c => c2.includes(c));
+      const keyword = shared.length > 0 ? shared[0] : (c1[0] || c2[0] || 'restaurant');
+      const places = await fetchNearby(location, keyword);
+      const { restaurants, sharedCuisines } = computeResults(places, answers1, ans2);
+      setResults({ restaurants, sharedCuisines });
+      setScreen('results');
+    } catch (e) {
+      setError(e.message);
+      setScreen('home');
+    }
+  };
+
+  if (error) return (
+    <div className="page" style={{ justifyContent: 'center', minHeight: '100vh' }}>
+      <div className="card" style={{ maxWidth: 400, textAlign: 'center' }}>
+        <div style={{ fontSize: 52, marginBottom: 12 }}>⚠️</div>
+        <h2 style={{ fontFamily: 'Inter', fontWeight: 700, marginBottom: 10 }}>Something went wrong</h2>
+        <p className="error">{error}</p>
+        <button className="btn btn-primary btn-full" onClick={restart} style={{ marginTop: 16 }}>Try Again</button>
+      </div>
+    </div>
+  );
+
+  if (screen === 'home')    return <Home onStart={handleStart} />;
+  if (screen === 'location') return <LocationPicker onDone={handleLocation} />;
+  if (screen === 'survey1') return <Survey personNum={1} onDone={handlePerson1Done} />;
+  if (screen === 'handoff') return <Handoff onReady={() => setScreen('survey2')} />;
+  if (screen === 'survey2') return <Survey personNum={2} onDone={handlePerson2Done} />;
+  if (screen === 'loading') return <Loading />;
+  if (screen === 'results') return <Results restaurants={results.restaurants} sharedCuisines={results.sharedCuisines} onRestart={restart} />;
+  return null;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

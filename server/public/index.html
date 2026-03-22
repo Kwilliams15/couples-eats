@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Couples Eats 🍽️</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --pink: #ff6b6b; --pink-dark: #e85555; --rose: #ffd6d6;
+      --cream: #fff9f5; --text: #1a1a2e; --muted: #6b7280;
+      --border: #e5e7eb; --shadow: 0 4px 24px rgba(0,0,0,0.08); --radius: 16px;
+    }
+    body { font-family: 'Inter', sans-serif; background: var(--cream); color: var(--text); min-height: 100vh; }
+    h1, h2 { font-family: 'Playfair Display', serif; }
+    #root { min-height: 100vh; display: flex; flex-direction: column; }
+    .page { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 24px 16px 48px; max-width: 600px; margin: 0 auto; width: 100%; }
+    .card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); padding: 28px; width: 100%; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 28px; border-radius: 12px; font-size: 1rem; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; font-family: inherit; text-decoration: none; }
+    .btn-primary { background: var(--pink); color: white; }
+    .btn-primary:hover:not(:disabled) { background: var(--pink-dark); transform: translateY(-1px); }
+    .btn-secondary { background: white; color: var(--pink); border: 2px solid var(--pink); }
+    .btn-secondary:hover { background: var(--rose); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+    .btn-full { width: 100%; }
+    input[type="text"], input[type="number"], input[type="password"] {
+      width: 100%; padding: 14px 16px; border: 2px solid var(--border); border-radius: 12px;
+      font-size: 1rem; font-family: inherit; outline: none; transition: border-color 0.2s;
+    }
+    input:focus { border-color: var(--pink); }
+    .error { background: #fee2e2; color: #dc2626; padding: 12px 16px; border-radius: 10px; font-size: 0.9rem; margin-top: 12px; text-align: center; }
+    .tag { font-size: 0.75rem; padding: 3px 10px; border-radius: 99px; }
+    .hidden { display: none !important; }
+    .divider { display: flex; align-items: center; gap: 12px; }
+    .divider hr { flex: 1; border: none; border-top: 1px solid var(--border); }
+    .divider span { color: var(--muted); font-size: 0.85rem; }
+    @keyframes bounce { 0%,100%{transform:translateY(0);opacity:.5} 50%{transform:translateY(-10px);opacity:1} }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--pink); display: inline-block; }
+    .opt-btn { padding: 13px 16px; border-radius: 12px; text-align: left; font-family: inherit; font-size: 0.95rem; cursor: pointer; transition: all 0.15s; border: 2px solid var(--border); background: white; color: var(--text); width: 100%; }
+    .opt-btn.selected { border-color: var(--pink); background: var(--rose); color: var(--pink-dark); font-weight: 600; }
+    .progress-bar-wrap { width: 100%; height: 6px; background: var(--border); border-radius: 99px; margin-bottom: 28px; overflow: hidden; }
+    .progress-bar { height: 100%; background: var(--pink); border-radius: 99px; transition: width 0.3s; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+// ─────────────────────────────────────────────
+// QUESTIONS
+// ─────────────────────────────────────────────
+const QUESTIONS = [
+  { id:'cuisines', q:'What cuisines are you feeling?', sub:'Pick all that sound good.', multi:true, opts:[
+    {l:'🍕 Italian',v:'Italian'},{l:'🍣 Japanese',v:'Japanese'},{l:'🌮 Mexican',v:'Mexican'},
+    {l:'🍔 American',v:'American'},{l:'🍜 Chinese / Dim Sum',v:'Chinese'},{l:'🍛 Indian',v:'Indian'},
+    {l:'🥙 Mediterranean',v:'Mediterranean'},{l:'🥡 Thai',v:'Thai'},{l:'🍗 Korean BBQ',v:'Korean'},
+    {l:'🥗 Healthy / Salads',v:'Healthy'},
+  ]},
+  { id:'priceRange', q:"What's your budget tonight?", sub:'Per person, before drinks.', multi:false, opts:[
+    {l:'$ Under $15',v:1},{l:'$$ $15–$30',v:2},{l:'$$$ $30–$60',v:3},{l:'$$$$ $60+',v:4},
+  ]},
+  { id:'vibe', q:"What's the vibe?", sub:'Pick the one that fits tonight.', multi:false, opts:[
+    {l:'🕯️ Romantic & intimate',v:'romantic'},{l:'😎 Casual & laid-back',v:'casual'},
+    {l:'⚡ Quick & easy',v:'fast'},{l:'✨ Trendy & fun',v:'trendy'},
+  ]},
+  { id:'dietary', q:'Any dietary needs?', sub:'Select all that apply.', multi:true, opts:[
+    {l:'🥬 Vegetarian options needed',v:'vegetarian'},{l:'🌱 Vegan options needed',v:'vegan'},
+    {l:'🌾 Gluten-free options needed',v:'gluten-free'},{l:'🥩 Halal',v:'halal'},
+    {l:'✡️ Kosher',v:'kosher'},{l:'😌 No restrictions',v:'none'},
+  ]},
+  { id:'diningMode', q:'How do you want to eat?', sub:'Just one.', multi:false, opts:[
+    {l:'🪑 Sit-down / dine-in',v:'dine-in'},{l:'📦 Takeout / pickup',v:'takeout'},
+    {l:'🛵 Delivery',v:'delivery'},{l:'🙂 No preference',v:'any'},
+  ]},
+  { id:'mood', q:"What's your food mood?", sub:'How adventurous are you feeling?', multi:false, opts:[
+    {l:"🗺️ Let's try something new",v:'adventurous'},{l:'🏡 Comfort food please',v:'comfort'},
+    {l:'⚖️ Somewhere in between',v:'balanced'},
+  ]},
+  { id:'seating', q:'Seating preference?', sub:'Inside, outside, or anywhere?', multi:false, opts:[
+    {l:'🏠 Indoors',v:'indoor'},{l:'🌿 Outdoors / patio',v:'outdoor'},{l:'💁 No preference',v:'any'},
+  ]},
+  { id:'waitTime', q:'How long are you willing to wait?', sub:'Hunger level check.', multi:false, opts:[
+    {l:"⚡ Starving — 10 min max",v:'none'},{l:'🕐 Up to 30 min is fine',v:'short'},
+    {l:'🕑 We can wait an hour if worth it',v:'long'},
+  ]},
+  { id:'dealbreakers', q:'Any absolute dealbreakers?', sub:"We'll try to avoid these.", multi:true, opts:[
+    {l:'🐟 No seafood',v:'no-seafood'},{l:'🌶️ Nothing too spicy',v:'no-spicy'},
+    {l:'🥩 No red meat',v:'no-red-meat'},{l:'🧅 No onions/garlic',v:'no-alliums'},
+    {l:'🥛 No dairy',v:'no-dairy'},{l:'👍 No dealbreakers',v:'none'},
+  ]},
+  { id:'priority', q:'What matters most when picking a place?', sub:'Your top priority.', multi:false, opts:[
+    {l:'⭐ Best ratings & reviews',v:'rating'},{l:'📍 Closest to us',v:'distance'},
+    {l:'💰 Best value for money',v:'value'},{l:'📸 Ambiance / Instagrammable',v:'ambiance'},
+  ]},
+];
+
+// ─────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────
+var state = {
+  screen: 'home',   // home | survey | waiting | results
+  view: 'home',     // sub-view within home: 'home' | 'join'
+  ws: null,
+  roomCode: null,
+  role: null,
+  step: 0,
+  answers: {},
+  location: null,
+  partnerReady: false,
+  restaurants: [],
+  sharedCuisines: [],
+  picked: null,
+  error: '',
+  locationError: '',
+  showManual: false,
+};
+
+// ─────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────
+function render() {
+  var root = document.getElementById('root');
+  root.innerHTML = '';
+  var el;
+  if (state.screen === 'home')    el = renderHome();
+  else if (state.screen === 'survey')   el = renderSurvey();
+  else if (state.screen === 'waiting')  el = renderWaiting();
+  else if (state.screen === 'results')  el = renderResults();
+  else el = div('', '');
+  root.appendChild(el);
+}
+
+// ─────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────
+function el(tag, attrs, children) {
+  var node = document.createElement(tag);
+  if (attrs) Object.keys(attrs).forEach(function(k) {
+    if (k === 'style') {
+      Object.keys(attrs.style).forEach(function(s) { node.style[s] = attrs.style[s]; });
+    } else if (k.startsWith('on')) {
+      node.addEventListener(k.slice(2).toLowerCase(), attrs[k]);
+    } else if (k === 'className') {
+      node.className = attrs[k];
+    } else {
+      node.setAttribute(k, attrs[k]);
+    }
+  });
+  if (typeof children === 'string') node.innerHTML = children;
+  else if (Array.isArray(children)) children.forEach(function(c) { if (c) node.appendChild(c); });
+  else if (children) node.appendChild(children);
+  return node;
+}
+function div(cls, children) { return el('div', cls ? {className:cls} : null, children); }
+function p(text, style) { return el('p', style ? {style:style} : null, text); }
+function h1(text) { return el('h1', null, text); }
+function h2(text) { return el('h2', null, text); }
+function btn(text, cls, onclick, disabled) {
+  var b = el('button', {className: 'btn ' + (cls||''), onClick: onclick}, text);
+  if (disabled) b.disabled = true;
+  return b;
+}
+function input(type, placeholder, value, onchange, style) {
+  var i = el('input', {type: type, placeholder: placeholder, value: value||''}, null);
+  if (style) Object.keys(style).forEach(function(k) { i.style[k] = style[k]; });
+  i.addEventListener('input', function() { onchange(this.value); });
+  return i;
+}
+
+// ─────────────────────────────────────────────
+// HOME SCREEN
+// ─────────────────────────────────────────────
+var joinCodeVal = '';
+
+function renderHome() {
+  var wrap = el('div', {className:'page', style:{justifyContent:'center', minHeight:'100vh'}}, null);
+
+  var hero = el('div', {style:{textAlign:'center', marginBottom:'36px'}}, null);
+  hero.appendChild(el('div', {style:{fontSize:'72px', marginBottom:'12px'}}, '🍽️'));
+  hero.appendChild(el('h1', {style:{fontSize:'2.8rem', marginBottom:'10px'}}, 'Couples Eats'));
+  hero.appendChild(el('p', {style:{color:'var(--muted)', maxWidth:'340px', margin:'0 auto', lineHeight:'1.6'}},
+    'Both of you answer a quick survey and we\'ll find the perfect restaurant for tonight.'));
+  wrap.appendChild(hero);
+
+  var card = el('div', {className:'card', style:{maxWidth:'420px', display:'flex', flexDirection:'column', gap:'16px'}}, null);
+
+  if (state.view === 'home') {
+    card.appendChild(btn('💑 Start a New Session', 'btn-primary btn-full', function() { createRoom(); }, false));
+    var dividerEl = el('div', {className:'divider'}, null);
+    dividerEl.appendChild(el('hr', null, null));
+    dividerEl.appendChild(el('span', null, 'or'));
+    dividerEl.appendChild(el('hr', null, null));
+    card.appendChild(dividerEl);
+    card.appendChild(btn('🔗 Join Partner\'s Session', 'btn-secondary btn-full', function() { state.view = 'join'; render(); }));
+    if (state.error) card.appendChild(el('p', {className:'error'}, state.error));
+    card.appendChild(el('p', {style:{textAlign:'center', fontSize:'0.8rem', color:'var(--muted)'}},
+      'Each person uses their own device. Share the room code with your partner.'));
+  } else {
+    card.appendChild(el('h2', {style:{fontFamily:'Inter', fontWeight:'600', fontSize:'1.3rem'}}, 'Enter Room Code'));
+    card.appendChild(el('p', {style:{color:'var(--muted)', fontSize:'0.9rem'}}, 'Your partner sees a 5-letter code after starting a session.'));
+    var codeInput = el('input', {type:'text', placeholder:'e.g. XKQZ2', maxlength:'5',
+      style:'text-transform:uppercase;letter-spacing:0.15em;font-size:1.2rem;text-align:center;width:100%;padding:14px 16px;border:2px solid var(--border);border-radius:12px;font-family:inherit;outline:none;'}, null);
+    codeInput.value = joinCodeVal;
+    codeInput.addEventListener('input', function() { joinCodeVal = this.value.toUpperCase(); this.value = joinCodeVal; });
+    codeInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') joinRoom(); });
+    card.appendChild(codeInput);
+    card.appendChild(btn('Join Session', 'btn-primary btn-full', joinRoom));
+    card.appendChild(btn('← Back', 'btn-secondary btn-full', function() { state.view='home'; state.error=''; render(); }));
+    if (state.error) card.appendChild(el('p', {className:'error'}, state.error));
+  }
+
+  wrap.appendChild(card);
+  return wrap;
+}
+
+// ─────────────────────────────────────────────
+// SURVEY SCREEN
+// ─────────────────────────────────────────────
+var manualLat = '', manualLng = '';
+
+function renderSurvey() {
+  var q = QUESTIONS[state.step];
+  var isMulti = q.multi;
+  var cur = state.answers[q.id];
+  var canNext = isMulti ? (cur && cur.length > 0) : (cur !== undefined && cur !== null);
+  var progress = ((state.step + 1) / QUESTIONS.length * 100) + '%';
+
+  var wrap = el('div', {className:'page'}, null);
+
+  // Top bar
+  var topBar = el('div', {style:{width:'100%', display:'flex', justifyContent:'space-between', marginBottom:'16px'}}, null);
+  topBar.appendChild(el('span', {style:{fontWeight:'700', color:'var(--pink)'}}, 'Room: ' + state.roomCode));
+  topBar.appendChild(el('span', {style:{color:'var(--muted)', fontSize:'0.85rem'}}, (state.step+1) + ' / ' + QUESTIONS.length));
+  wrap.appendChild(topBar);
+
+  // Progress bar
+  var pb = el('div', {className:'progress-bar-wrap'}, null);
+  pb.appendChild(el('div', {className:'progress-bar', style:{width:progress}}, null));
+  wrap.appendChild(pb);
+
+  // Location warning
+  if (!state.location) {
+    var locWarn = el('div', {style:{width:'100%', marginBottom:'16px'}}, null);
+    if (state.locationError) {
+      var locMsg = el('div', {style:{background:'#fef3c7', border:'1px solid #f59e0b', borderRadius:'10px', padding:'12px 16px', fontSize:'0.85rem', color:'#92400e', marginBottom:'8px'}}, null);
+      locMsg.innerHTML = '⚠️ ' + state.locationError + ' ';
+      var manBtn = el('button', {style:{color:'var(--pink)', background:'none', border:'none', cursor:'pointer', fontWeight:'600'}}, state.showManual ? 'Hide' : 'Enter manually');
+      manBtn.addEventListener('click', function() { state.showManual = !state.showManual; render(); });
+      locMsg.appendChild(manBtn);
+      locWarn.appendChild(locMsg);
+    }
+    if (state.showManual) {
+      var manRow = el('div', {style:{display:'flex', gap:'8px'}}, null);
+      var latIn = el('input', {type:'number', placeholder:'Latitude', style:'flex:1;padding:12px;border:2px solid var(--border);border-radius:10px;font-family:inherit;font-size:0.9rem;outline:none;'}, null);
+      latIn.value = manualLat;
+      latIn.addEventListener('input', function() { manualLat = this.value; });
+      var lngIn = el('input', {type:'number', placeholder:'Longitude', style:'flex:1;padding:12px;border:2px solid var(--border);border-radius:10px;font-family:inherit;font-size:0.9rem;outline:none;'}, null);
+      lngIn.value = manualLng;
+      lngIn.addEventListener('input', function() { manualLng = this.value; });
+      var setBtn = el('button', {className:'btn btn-primary', style:'padding:12px 16px;'}, '✓');
+      setBtn.addEventListener('click', function() {
+        if (manualLat && manualLng) { state.location = {lat: parseFloat(manualLat), lng: parseFloat(manualLng)}; render(); }
+      });
+      manRow.appendChild(latIn); manRow.appendChild(lngIn); manRow.appendChild(setBtn);
+      locWarn.appendChild(manRow);
+    }
+    wrap.appendChild(locWarn);
+  } else {
+    wrap.appendChild(el('div', {style:{width:'100%', marginBottom:'12px', fontSize:'0.8rem', color:'#15803d'}}, '📍 Location detected'));
+  }
+
+  // Question card
+  var card = el('div', {className:'card'}, null);
+  card.appendChild(el('h2', {style:{fontSize:'1.35rem', marginBottom:'6px'}}, q.q));
+  card.appendChild(el('p', {style:{color:'var(--muted)', fontSize:'0.88rem', marginBottom:'22px'}}, q.sub));
+
+  var opts = el('div', {style:{display:'flex', flexDirection:'column', gap:'9px'}}, null);
+  q.opts.forEach(function(opt) {
+    var sel = isMulti ? (cur && cur.indexOf(opt.v) >= 0) : cur === opt.v;
+    var ob = el('button', {className:'opt-btn' + (sel?' selected':'')}, opt.l);
+    ob.addEventListener('click', function() { toggleAnswer(q.id, opt.v, isMulti); });
+    opts.appendChild(ob);
+  });
+  card.appendChild(opts);
+
+  var navRow = el('div', {style:{display:'flex', justifyContent:'space-between', marginTop:'24px', gap:'10px'}}, null);
+  if (state.step > 0) {
+    navRow.appendChild(btn('← Back', 'btn-secondary', function() { state.step--; render(); }));
+  } else {
+    navRow.appendChild(el('div', null, null));
+  }
+  var nextLabel = state.step === QUESTIONS.length - 1 ? '🍽️ Find Restaurants' : 'Next →';
+  var nextBtn = btn(nextLabel, 'btn-primary', function() {
+    if (state.step < QUESTIONS.length - 1) { state.step++; render(); }
+    else submitAnswers();
+  }, !canNext);
+  nextBtn.style.minWidth = '160px';
+  navRow.appendChild(nextBtn);
+  card.appendChild(navRow);
+  wrap.appendChild(card);
+
+  if (state.partnerReady) {
+    wrap.appendChild(el('div', {style:{marginTop:'20px', padding:'12px 20px', background:'#d1fae5', borderRadius:'12px', fontSize:'0.9rem', color:'#065f46'}},
+      '✅ Your partner has finished their survey!'));
+  }
+
+  return wrap;
+}
+
+function toggleAnswer(qId, val, isMulti) {
+  if (isMulti) {
+    var arr = state.answers[qId] ? state.answers[qId].slice() : [];
+    var idx = arr.indexOf(val);
+    if (idx >= 0) arr.splice(idx, 1); else arr.push(val);
+    state.answers[qId] = arr;
+  } else {
+    state.answers[qId] = val;
+  }
+  render();
+}
+
+// ─────────────────────────────────────────────
+// WAITING SCREEN
+// ─────────────────────────────────────────────
+function renderWaiting() {
+  var wrap = el('div', {className:'page', style:{justifyContent:'center', minHeight:'100vh'}}, null);
+  var inner = el('div', {style:{textAlign:'center'}}, null);
+  inner.appendChild(el('div', {style:{fontSize:'64px', marginBottom:'20px', display:'inline-block', animation:'spin 2s linear infinite'}}, '⏳'));
+  inner.appendChild(el('h1', {style:{fontSize:'2rem', marginBottom:'12px'}}, "You're all done!"));
+  inner.appendChild(el('p', {style:{color:'var(--muted)', maxWidth:'340px', margin:'0 auto 28px', lineHeight:'1.6'}},
+    state.partnerReady ? 'Both surveys in! Finding your restaurants…' : 'Waiting for your partner to finish…'));
+
+  var dots = el('div', {style:{display:'flex', gap:'12px', justifyContent:'center', marginBottom:'32px'}}, null);
+  [1,2,3].forEach(function(n) {
+    var d = el('div', {className:'dot'}, null);
+    d.style.animation = 'bounce 1.2s ease-in-out ' + ((n-1)*0.2) + 's infinite';
+    dots.appendChild(d);
+  });
+  inner.appendChild(dots);
+
+  var codeCard = el('div', {className:'card', style:{maxWidth:'340px', margin:'0 auto', textAlign:'left'}}, null);
+  codeCard.appendChild(el('p', {style:{fontSize:'0.9rem', color:'var(--muted)', lineHeight:'1.6', marginBottom:'12px'}},
+    'Share this code with your partner:'));
+  codeCard.appendChild(el('div', {style:{padding:'16px', background:'var(--rose)', borderRadius:'12px', textAlign:'center', fontSize:'2rem', fontWeight:'700', letterSpacing:'0.2em', color:'var(--pink-dark)', fontFamily:'monospace'}},
+    state.roomCode));
+  inner.appendChild(codeCard);
+  wrap.appendChild(inner);
+  return wrap;
+}
+
+// ─────────────────────────────────────────────
+// RESULTS SCREEN
+// ─────────────────────────────────────────────
+var PRICE = {1:'$', 2:'$$', 3:'$$$', 4:'$$$$'};
+
+function renderResults() {
+  if (state.picked) return renderPicked();
+
+  var wrap = el('div', {className:'page'}, null);
+  var header = el('div', {style:{textAlign:'center', marginBottom:'28px', paddingTop:'16px'}}, null);
+  header.appendChild(el('div', {style:{fontSize:'52px'}}, '🎉'));
+  header.appendChild(el('h1', {style:{fontSize:'2rem', marginTop:'8px', marginBottom:'6px'}}, "Here are your matches!"));
+  if (state.sharedCuisines.length > 0) {
+    header.appendChild(el('p', {style:{color:'var(--muted)', fontSize:'0.9rem'}},
+      'You both enjoy: <strong style="color:var(--text)">' + state.sharedCuisines.join(', ') + '</strong>'));
+  }
+  header.appendChild(el('p', {style:{color:'var(--muted)', fontSize:'0.8rem', marginTop:'4px'}}, 'Sorted by how well they match both of you.'));
+  wrap.appendChild(header);
+
+  if (!state.restaurants.length) {
+    wrap.appendChild(el('div', {style:{textAlign:'center'}}, null));
+    wrap.appendChild(el('p', {style:{color:'var(--muted)', marginBottom:'24px'}}, 'No restaurants found. Try a different area or check your API key.'));
+    wrap.appendChild(btn('Start Over', 'btn-primary', restart));
+    return wrap;
+  }
+
+  var list = el('div', {style:{display:'flex', flexDirection:'column', gap:'16px', width:'100%'}}, null);
+  state.restaurants.forEach(function(r, i) {
+    list.appendChild(renderRestaurantCard(r, i));
+  });
+  wrap.appendChild(list);
+
+  wrap.appendChild(el('div', {style:{height:'16px'}}, null));
+  wrap.appendChild(btn('🔄 Start Over', 'btn-secondary', restart));
+  return wrap;
+}
+
+function renderRestaurantCard(r, i) {
+  var card = el('div', {className:'card', style:{cursor:'pointer', padding:'22px 24px'}}, null);
+  card.addEventListener('click', function() { state.picked = r; render(); });
+
+  var top = el('div', {style:{display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'12px'}}, null);
+  var left = el('div', {style:{flex:'1'}}, null);
+  var nameRow = el('div', {style:{display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px'}}, null);
+  if (i < 3) nameRow.appendChild(el('span', {style:{fontSize:'1.1rem'}}, ['🥇','🥈','🥉'][i]));
+  nameRow.appendChild(el('h2', {style:{fontFamily:'Inter', fontWeight:'700', fontSize:'1.05rem'}}, r.name));
+  left.appendChild(nameRow);
+  left.appendChild(el('p', {style:{fontSize:'0.82rem', color:'var(--muted)'}}, r.vicinity || ''));
+  top.appendChild(left);
+  if (r.price_level) top.appendChild(el('span', {style:{fontWeight:'700', color:'#15803d', flexShrink:'0'}}, PRICE[r.price_level] || ''));
+  card.appendChild(top);
+
+  var meta = el('div', {style:{display:'flex', alignItems:'center', gap:'14px', marginTop:'12px', flexWrap:'wrap'}}, null);
+  if (r.rating) {
+    meta.appendChild(el('span', {style:{fontSize:'0.88rem'}},
+      '⭐ <strong>' + r.rating + '</strong> <span style="color:var(--muted);font-size:0.78rem">(' + ((r.user_ratings_total||0).toLocaleString()) + ')</span>'));
+  }
+  if (r.opening_hours) {
+    var open = r.opening_hours.open_now;
+    var badge = el('span', {className:'tag', style:{background: open?'#d1fae5':'#fee2e2', color: open?'#065f46':'#dc2626', fontWeight:'600'}},
+      open ? 'Open now' : 'Closed');
+    meta.appendChild(badge);
+  }
+  var scoreBadge = el('span', {className:'tag', style:{background:'#f0f0ff', color:'#4338ca', fontWeight:'600', marginLeft:'auto'}},
+    r.matchScore + 'pt match');
+  meta.appendChild(scoreBadge);
+  card.appendChild(meta);
+
+  if (r.types && r.types.length) {
+    var tags = el('div', {style:{marginTop:'10px', display:'flex', flexWrap:'wrap', gap:'6px'}}, null);
+    r.types.slice(0,3).forEach(function(t) {
+      if (['food','establishment','point_of_interest'].indexOf(t) < 0) {
+        tags.appendChild(el('span', {className:'tag', style:{background:'var(--rose)', color:'var(--pink-dark)'}}, t.replace(/_/g,' ')));
+      }
+    });
+    card.appendChild(tags);
+  }
+
+  card.appendChild(el('div', {style:{marginTop:'14px', textAlign:'right', color:'var(--pink)', fontWeight:'600', fontSize:'0.88rem'}}, 'Tap to pick this one →'));
+  return card;
+}
+
+function renderPicked() {
+  var r = state.picked;
+  var mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.name) + '&query_place_id=' + r.place_id;
+  var wrap = el('div', {className:'page', style:{justifyContent:'center', minHeight:'100vh', textAlign:'center'}}, null);
+  wrap.appendChild(el('div', {style:{fontSize:'80px', marginBottom:'16px'}}, '🎊'));
+  wrap.appendChild(el('h1', {style:{fontSize:'2rem', marginBottom:'8px'}}, "You're going to"));
+  wrap.appendChild(el('h2', {style:{fontSize:'1.9rem', color:'var(--pink)', marginBottom:'8px'}}, r.name));
+  wrap.appendChild(el('p', {style:{color:'var(--muted)', marginBottom:'32px'}}, r.vicinity || ''));
+
+  var btns = el('div', {style:{display:'flex', gap:'12px', justifyContent:'center', flexWrap:'wrap'}}, null);
+  var mapLink = el('a', {href:mapsUrl, target:'_blank', rel:'noopener noreferrer', className:'btn btn-primary', style:'text-decoration:none'}, '📍 Open in Google Maps');
+  btns.appendChild(mapLink);
+  btns.appendChild(btn('← Other Options', 'btn-secondary', function() { state.picked = null; render(); }));
+  wrap.appendChild(btns);
+  wrap.appendChild(btn('Start a new session', '', restart));
+  return wrap;
+}
+
+// ─────────────────────────────────────────────
+// WEBSOCKET
+// ─────────────────────────────────────────────
+function connectWS(onOpen) {
+  var wsUrl = 'ws://' + window.location.host;
+  var ws = new WebSocket(wsUrl);
+  ws.onmessage = function(e) {
+    var data;
+    try { data = JSON.parse(e.data); } catch(err) { return; }
+    handleServerMsg(data);
+  };
+  ws.onerror = function() { state.error = 'Could not connect to server. Is it running?'; render(); };
+  ws.onopen = function() { onOpen(ws); };
+  ws.onclose = function() {
+    if (state.screen === 'survey' || state.screen === 'waiting') {
+      state.error = 'Connection lost.';
+      state.screen = 'home';
+      render();
+    }
+  };
+  return ws;
+}
+
+function handleServerMsg(data) {
+  if (data.type === 'ROOM_CREATED') {
+    state.roomCode = data.roomCode;
+    state.role = data.role;
+    state.screen = 'survey';
+    state.step = 0;
+    state.answers = {};
+    getLocation();
+    render();
+  } else if (data.type === 'ROOM_JOINED') {
+    state.roomCode = data.roomCode;
+    state.role = data.role;
+    state.screen = 'survey';
+    state.step = 0;
+    state.answers = {};
+    getLocation();
+    render();
+  } else if (data.type === 'PARTNER_JOINED') {
+    // partner connected - no UI change needed unless on waiting
+  } else if (data.type === 'PARTNER_READY') {
+    state.partnerReady = true;
+    render();
+  } else if (data.type === 'RESULTS') {
+    state.restaurants = data.restaurants || [];
+    state.sharedCuisines = data.sharedCuisines || [];
+    state.screen = 'results';
+    state.picked = null;
+    render();
+  } else if (data.type === 'PARTNER_DISCONNECTED') {
+    alert('Your partner disconnected.');
+  } else if (data.type === 'ERROR') {
+    alert('Error: ' + data.message);
+    state.screen = 'home';
+    state.error = data.message;
+    render();
+  }
+}
+
+function createRoom() {
+  state.error = '';
+  var ws = connectWS(function(sock) {
+    state.ws = sock;
+    sock.send(JSON.stringify({type:'CREATE_ROOM'}));
+  });
+}
+
+function joinRoom() {
+  state.error = '';
+  if (!joinCodeVal.trim()) { state.error = 'Enter a room code.'; render(); return; }
+  var ws = connectWS(function(sock) {
+    state.ws = sock;
+    sock.send(JSON.stringify({type:'JOIN_ROOM', roomCode: joinCodeVal.trim()}));
+  });
+}
+
+function submitAnswers() {
+  state.ws.send(JSON.stringify({
+    type: 'SUBMIT_ANSWERS',
+    answers: state.answers,
+    location: state.location
+  }));
+  state.screen = 'waiting';
+  render();
+}
+
+function restart() {
+  if (state.ws) { try { state.ws.close(); } catch(e) {} }
+  state = {
+    screen:'home', view:'home', ws:null, roomCode:null, role:null,
+    step:0, answers:{}, location:null, partnerReady:false,
+    restaurants:[], sharedCuisines:[], picked:null, error:'', locationError:'', showManual:false
+  };
+  joinCodeVal = ''; manualLat = ''; manualLng = '';
+  render();
+}
+
+// ─────────────────────────────────────────────
+// GEOLOCATION
+// ─────────────────────────────────────────────
+function getLocation() {
+  if (!navigator.geolocation) {
+    state.locationError = 'Geolocation not supported. Please enter manually.';
+    render();
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      state.location = {lat: pos.coords.latitude, lng: pos.coords.longitude};
+      render();
+    },
+    function() {
+      state.locationError = 'Could not auto-detect location.';
+      render();
+    }
+  );
+}
+
+// ─────────────────────────────────────────────
+// BOOT
+// ─────────────────────────────────────────────
+render();
+</script>
+</body>
+</html>
